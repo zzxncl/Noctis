@@ -1,0 +1,971 @@
+--[[
+    NOCTIS UI HUB // 1:1 Hidden-Style Bento Replica
+    Universal Executor Compatibility (Wave, Potassium, Volt, Delta, Solara, Swift, Xeno, Synapse, etc.)
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local CoreGui = game:GetService("CoreGui")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+
+-- // 1. UNIVERSAL GUI PARENTING (Works on every executor)
+local function GetSafeGuiParent()
+    local success, result = pcall(function()
+        if type(gethui) == "function" then
+            return gethui()
+        end
+    end)
+    if success and result then
+        return result
+    end
+
+    local coreSuccess, coreResult = pcall(function()
+        return CoreGui
+    end)
+    if coreSuccess and coreResult then
+        return coreResult
+    end
+
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Remove any existing Noctis instance on re-execute
+local GuiParent = GetSafeGuiParent()
+for _, child in ipairs(GuiParent:GetChildren()) do
+    if child.Name == "NoctisHub_UI" then
+        pcall(function() child:Destroy() end)
+    end
+end
+
+-- // 2. UNIVERSAL EXECUTOR DETECTION
+local function DetectExecutor()
+    local execName = "Unknown Executor"
+    local execVersion = ""
+    local supported = true
+
+    pcall(function()
+        if type(identifyexecutor) == "function" then
+            local name, ver = identifyexecutor()
+            if name and tostring(name) ~= "" then
+                execName = tostring(name)
+                execVersion = ver and tostring(ver) or ""
+                return
+            end
+        end
+        if type(getexecutorname) == "function" then
+            local name = getexecutorname()
+            if name and tostring(name) ~= "" then
+                execName = tostring(name)
+                return
+            end
+        end
+        if syn then
+            execName = "Synapse"
+        elseif fluxus then
+            execName = "Fluxus"
+        elseif KRNL_LOADED then
+            execName = "Krnl"
+        elseif is_sirhurt_closure then
+            execName = "SirHurt"
+        end
+    end)
+
+    return execName, execVersion, supported
+end
+
+-- // 3. UNIVERSAL CLIPBOARD HELPER
+local function CopyToClipboard(text)
+    local copied = false
+    pcall(function()
+        if type(setclipboard) == "function" then
+            setclipboard(tostring(text))
+            copied = true
+        elseif type(toclipboard) == "function" then
+            toclipboard(tostring(text))
+            copied = true
+        elseif Clipboard and type(Clipboard.set) == "function" then
+            Clipboard.set(tostring(text))
+            copied = true
+        end
+    end)
+    return copied
+end
+
+-- // 4. ROBLOX AVATAR THUMBNAIL DETECTION (Both Greeting Portrait & Bottom-Left Sidebar Icon)
+local function GetPlayerAvatarBust(userId)
+    local fallbackUrl = string.format("rbxthumb://type=AvatarBust&id=%d&w=150&h=150", userId)
+    local ok, content = pcall(function()
+        return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size150x150)
+    end)
+    if ok and content and content ~= "" then
+        return content
+    end
+    return fallbackUrl
+end
+
+-- // 5. DETECT GAME NAME
+local GameName = "Experience"
+task.spawn(function()
+    pcall(function()
+        local info = MarketplaceService:GetProductInfo(game.PlaceId)
+        if info and info.Name then
+            GameName = info.Name
+        end
+    end)
+end)
+
+-- // 6. CREATE SCREENGUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NoctisHub_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+
+pcall(function()
+    if syn and type(syn.protect_gui) == "function" then
+        syn.protect_gui(ScreenGui)
+    end
+end)
+ScreenGui.Parent = GuiParent
+
+local function Create(className, props, children)
+    local inst = Instance.new(className)
+    for k, v in pairs(props or {}) do
+        inst[k] = v
+    end
+    for _, child in ipairs(children or {}) do
+        child.Parent = inst
+    end
+    return inst
+end
+
+-- Helper for radial corner glow cards (Emerald / Crimson / Blurple / Amber)
+local function ApplyCardGlow(cardFrame, accentColor, glowPosition)
+    cardFrame.BackgroundColor3 = Color3.fromRGB(9, 10, 13)
+    cardFrame.ClipsDescendants = true
+
+    local surfaceGrad = Create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, accentColor:Lerp(Color3.fromRGB(9, 10, 13), 0.58)),
+            ColorSequenceKeypoint.new(0.52, Color3.fromRGB(11, 12, 16)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 9, 12))
+        }),
+        Rotation = (glowPosition == "TopLeft") and 35 or -35,
+        Parent = cardFrame
+    })
+
+    local bloom = Create("ImageLabel", {
+        Name = "CornerGlow",
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://5554236805",
+        ImageColor3 = accentColor,
+        ImageTransparency = 0.52,
+        Size = UDim2.new(0, 260, 0, 220),
+        Position = (glowPosition == "TopLeft") and UDim2.new(0, -95, 0, -95) or UDim2.new(0, -90, 1, -135),
+        ZIndex = 1,
+        Parent = cardFrame
+    })
+
+    local stroke = Create("UIStroke", {
+        Thickness = 1,
+        Color = Color3.fromRGB(255, 255, 255),
+        Transparency = 0.25,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Parent = cardFrame
+    })
+
+    Create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, accentColor),
+            ColorSequenceKeypoint.new(0.45, Color3.fromRGB(55, 58, 70)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(32, 34, 42))
+        }),
+        Rotation = (glowPosition == "TopLeft") and 35 or -35,
+        Parent = stroke
+    })
+
+    return surfaceGrad, bloom
+end
+
+-- // 7. MAIN WINDOW FRAME (690 x 440)
+local MainWindow = Create("Frame", {
+    Name = "MainWindow",
+    Size = UDim2.new(0, 690, 0, 440),
+    Position = UDim2.new(0.5, -345, 0.5, -220),
+    BackgroundColor3 = Color3.fromRGB(20, 21, 27),
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    Parent = ScreenGui
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 12) }),
+    Create("UIStroke", {
+        Color = Color3.fromRGB(255, 255, 255),
+        Transparency = 0.86,
+        Thickness = 1
+    })
+})
+
+-- // 8. TOP HEADER BAR
+local TopBar = Create("Frame", {
+    Name = "TopBar",
+    Size = UDim2.new(1, 0, 0, 42),
+    BackgroundColor3 = Color3.fromRGB(28, 30, 38),
+    BorderSizePixel = 0,
+    Parent = MainWindow
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 12) }),
+    Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 12),
+        Position = UDim2.new(0, 0, 1, -12),
+        BackgroundColor3 = Color3.fromRGB(28, 30, 38),
+        BorderSizePixel = 0
+    }),
+    Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 1),
+        Position = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.92,
+        BorderSizePixel = 0
+    })
+})
+
+-- Crescent Moon Icon in Top-Left
+Create("Frame", {
+    Name = "MoonLogo",
+    Size = UDim2.new(0, 26, 0, 26),
+    Position = UDim2.new(0, 12, 0.5, -13),
+    BackgroundColor3 = Color3.fromRGB(115, 195, 255),
+    BorderSizePixel = 0,
+    Parent = TopBar
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+    Create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(210, 235, 255)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(103, 232, 249)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(99, 102, 241))
+        }),
+        Rotation = 45
+    }),
+    Create("Frame", {
+        Size = UDim2.new(0, 20, 0, 20),
+        Position = UDim2.new(0, 7, 0, -2),
+        BackgroundColor3 = Color3.fromRGB(28, 30, 38),
+        BorderSizePixel = 0
+    }, {
+        Create("UICorner", { CornerRadius = UDim.new(1, 0) })
+    })
+})
+
+local TitleLabel = Create("TextLabel", {
+    Name = "TitleLabel",
+    Size = UDim2.new(0, 0, 1, 0),
+    AutomaticSize = Enum.AutomaticSize.X,
+    Position = UDim2.new(0, 46, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "Noctis - " .. GameName,
+    TextColor3 = Color3.fromRGB(245, 246, 250),
+    Font = Enum.Font.GothamBold,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = TopBar
+})
+
+local DiscordTopLink = Create("TextLabel", {
+    Name = "DiscordSub",
+    Size = UDim2.new(0, 120, 1, 0),
+    Position = UDim2.new(0, 160, 0, 0),
+    BackgroundTransparency = 1,
+    Text = ".gg/noctis",
+    TextColor3 = Color3.fromRGB(139, 141, 152),
+    Font = Enum.Font.GothamMedium,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = TopBar
+})
+
+local function UpdateHeaderSpacing()
+    DiscordTopLink.Position = UDim2.new(0, 46 + TitleLabel.TextBounds.X + 10, 0, 1)
+end
+TitleLabel:GetPropertyChangedSignal("TextBounds"):Connect(UpdateHeaderSpacing)
+task.defer(UpdateHeaderSpacing)
+
+local MinimizeBtn = Create("TextButton", {
+    Name = "MinimizeBtn",
+    Size = UDim2.new(0, 28, 0, 28),
+    Position = UDim2.new(1, -68, 0.5, -14),
+    BackgroundColor3 = Color3.fromRGB(37, 39, 50),
+    Text = "❐",
+    TextColor3 = Color3.fromRGB(210, 214, 224),
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    AutoButtonColor = false,
+    Parent = TopBar
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 7) }),
+    Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.9, Thickness = 1 })
+})
+
+local CloseBtn = Create("TextButton", {
+    Name = "CloseBtn",
+    Size = UDim2.new(0, 28, 0, 28),
+    Position = UDim2.new(1, -35, 0.5, -14),
+    BackgroundColor3 = Color3.fromRGB(37, 39, 50),
+    Text = "✕",
+    TextColor3 = Color3.fromRGB(210, 214, 224),
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    AutoButtonColor = false,
+    Parent = TopBar
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 7) }),
+    Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.9, Thickness = 1 })
+})
+
+-- // 9. SMOOTH DRAGGING LOGIC
+do
+    local dragging, dragInput, dragStart, startPos
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainWindow.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    TopBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            TweenService:Create(MainWindow, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            }):Play()
+        end
+    end)
+end
+
+-- // 10. BODY CONTAINER & LEFT ICON SIDEBAR
+local BodyFrame = Create("Frame", {
+    Name = "BodyFrame",
+    Size = UDim2.new(1, 0, 1, -42),
+    Position = UDim2.new(0, 0, 0, 42),
+    BackgroundTransparency = 1,
+    Parent = MainWindow
+})
+
+local Sidebar = Create("Frame", {
+    Name = "Sidebar",
+    Size = UDim2.new(0, 50, 1, 0),
+    BackgroundColor3 = Color3.fromRGB(24, 25, 32),
+    BorderSizePixel = 0,
+    Parent = BodyFrame
+}, {
+    Create("Frame", {
+        Size = UDim2.new(0, 1, 1, 0),
+        Position = UDim2.new(1, -1, 0, 0),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.93,
+        BorderSizePixel = 0
+    })
+})
+
+local NavIconContainer = Create("Frame", {
+    Name = "NavIcons",
+    Size = UDim2.new(1, 0, 1, -54),
+    Position = UDim2.new(0, 0, 0, 8),
+    BackgroundTransparency = 1,
+    Parent = Sidebar
+}, {
+    Create("UIListLayout", {
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 5)
+    })
+})
+
+-- BOTTOM-LEFT ROBLOX AVATAR MINI THUMBNAIL
+local SidebarAvatarFrame = Create("Frame", {
+    Name = "SidebarAvatarFrame",
+    Size = UDim2.new(0, 34, 0, 34),
+    Position = UDim2.new(0.5, -17, 1, -42),
+    BackgroundColor3 = Color3.fromRGB(34, 36, 46),
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    Parent = Sidebar
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
+    Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.86, Thickness = 1 })
+})
+
+local SidebarAvatarImg = Create("ImageLabel", {
+    Name = "SidebarAvatarImg",
+    Size = UDim2.new(1, 0, 1, 0),
+    BackgroundTransparency = 1,
+    Image = string.format("rbxthumb://type=AvatarBust&id=%d&w=150&h=150", LocalPlayer.UserId),
+    Parent = SidebarAvatarFrame
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 8) })
+})
+
+-- // 11. PAGES CONTAINER
+local PagesFolder = Create("Frame", {
+    Name = "Pages",
+    Size = UDim2.new(1, -50, 1, 0),
+    Position = UDim2.new(0, 50, 0, 0),
+    BackgroundTransparency = 1,
+    Parent = BodyFrame
+})
+
+local TabButtons = {}
+local TabPages = {}
+
+local function SwitchTab(tabId)
+    for id, btn in pairs(TabButtons) do
+        local isSelected = (id == tabId)
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = isSelected and Color3.fromRGB(39, 41, 53) or Color3.fromRGB(24, 25, 32),
+            BackgroundTransparency = isSelected and 0 or 1,
+            TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 154, 168)
+        }):Play()
+    end
+    for id, page in pairs(TabPages) do
+        page.Visible = (id == tabId)
+    end
+end
+
+local NavDefinitions = {
+    { Id = "Home",      Icon = "🏠", Order = 1 },
+    { Id = "Main",      Icon = "<>", Order = 2 },
+    { Id = "Teleports", Icon = "📍", Order = 3 },
+    { Id = "Player",    Icon = "👤", Order = 4 },
+    { Id = "Specials",  Icon = "★",  Order = 5 },
+    { Id = "Alerts",    Icon = "🔔", Order = 6 },
+    { Id = "Settings",  Icon = "⚙",  Order = 7 },
+}
+
+for _, nav in ipairs(NavDefinitions) do
+    local btn = Create("TextButton", {
+        Name = "Nav_" .. nav.Id,
+        LayoutOrder = nav.Order,
+        Size = UDim2.new(0, 36, 0, 36),
+        BackgroundColor3 = Color3.fromRGB(39, 41, 53),
+        BackgroundTransparency = (nav.Id == "Home") and 0 or 1,
+        Text = nav.Icon,
+        TextColor3 = (nav.Id == "Home") and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 154, 168),
+        Font = Enum.Font.GothamBold,
+        TextSize = (nav.Icon == "<>") and 13 or 15,
+        AutoButtonColor = false,
+        Parent = NavIconContainer
+    }, {
+        Create("UICorner", { CornerRadius = UDim.new(0, 8) })
+    })
+
+    local page = Create("ScrollingFrame", {
+        Name = "Page_" .. nav.Id,
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Color3.fromRGB(90, 95, 110),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Visible = (nav.Id == "Home"),
+        Parent = PagesFolder
+    })
+
+    TabButtons[nav.Id] = btn
+    TabPages[nav.Id] = page
+
+    btn.MouseButton1Click:Connect(function()
+        SwitchTab(nav.Id)
+    end)
+end
+
+-- // 12. BUILD HOME DASHBOARD (1:1 EXACT REPLICA)
+local HomePage = TabPages["Home"]
+HomePage.ScrollingEnabled = false
+
+local HomePadding = Create("Frame", {
+    Name = "HomeContent",
+    Size = UDim2.new(1, -24, 1, -24),
+    Position = UDim2.new(0, 12, 0, 12),
+    BackgroundTransparency = 1,
+    Parent = HomePage
+})
+
+-- [A] TOP GREETING ROW: LARGE AVATAR PORTRAIT + GREETING BANNER
+local BigAvatarCard = Create("Frame", {
+    Name = "BigAvatarCard",
+    Size = UDim2.new(0, 74, 0, 74),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(26, 28, 36),
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) }),
+    Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.88, Thickness = 1 })
+})
+
+local BigAvatarImg = Create("ImageLabel", {
+    Name = "BigAvatarImg",
+    Size = UDim2.new(1, 0, 1, 0),
+    BackgroundTransparency = 1,
+    Image = string.format("rbxthumb://type=AvatarBust&id=%d&w=150&h=150", LocalPlayer.UserId),
+    Parent = BigAvatarCard
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) })
+})
+
+-- Async fetch high-reliability thumbnail for both Avatar slots
+task.spawn(function()
+    local bustUrl = GetPlayerAvatarBust(LocalPlayer.UserId)
+    BigAvatarImg.Image = bustUrl
+    SidebarAvatarImg.Image = bustUrl
+end)
+
+local GreetingBanner = Create("Frame", {
+    Name = "GreetingBanner",
+    Size = UDim2.new(1, -86, 0, 62),
+    Position = UDim2.new(0, 86, 0, 6),
+    BackgroundColor3 = Color3.fromRGB(24, 25, 33),
+    BorderSizePixel = 0,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) }),
+    Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.88, Thickness = 1 })
+})
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 22),
+    Position = UDim2.new(0, 14, 0, 11),
+    BackgroundTransparency = 1,
+    Text = "Hello, " .. LocalPlayer.Name,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
+    TextSize = 15,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = GreetingBanner
+})
+
+local GreetingSub = Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 18),
+    Position = UDim2.new(0, 14, 0, 33),
+    BackgroundTransparency = 1,
+    Text = string.format("%s - Noctis - %s", LocalPlayer.Name, GameName),
+    TextColor3 = Color3.fromRGB(142, 146, 159),
+    Font = Enum.Font.Gotham,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = GreetingBanner
+})
+
+task.spawn(function()
+    task.wait(0.5)
+    TitleLabel.Text = "Noctis - " .. GameName
+    GreetingSub.Text = string.format("%s - Noctis - %s", LocalPlayer.Name, GameName)
+end)
+
+-- [B] BENTO GRID SUB-TILE HELPER
+local function CreateSubTile(parent, title, valueText, pos, size)
+    local tile = Create("Frame", {
+        Position = pos,
+        Size = size,
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.935,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = parent
+    }, {
+        Create("UICorner", { CornerRadius = UDim.new(0, 7) }),
+        Create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.94, Thickness = 1 })
+    })
+
+    local tLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -18, 0, 16),
+        Position = UDim2.new(0, 9, 0, 6),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = Color3.fromRGB(245, 246, 250),
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 4,
+        Parent = tile
+    })
+
+    local vLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -18, 0, 15),
+        Position = UDim2.new(0, 9, 0, 21),
+        BackgroundTransparency = 1,
+        Text = valueText,
+        TextColor3 = Color3.fromRGB(160, 165, 178),
+        Font = Enum.Font.Gotham,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 4,
+        Parent = tile
+    })
+
+    return tile, vLabel, tLabel
+end
+
+-- 1. SERVER CARD (Emerald Green Corner Glow)
+local ServerCard = Create("Frame", {
+    Name = "ServerCard",
+    Size = UDim2.new(0.575, -6, 0, 212),
+    Position = UDim2.new(0, 0, 0, 84),
+    BorderSizePixel = 0,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) })
+})
+ApplyCardGlow(ServerCard, Color3.fromRGB(16, 185, 129), "BottomLeft")
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 18),
+    Position = UDim2.new(0, 12, 0, 10),
+    BackgroundTransparency = 1,
+    Text = "Server",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = ServerCard
+})
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 14),
+    Position = UDim2.new(0, 12, 0, 27),
+    BackgroundTransparency = 1,
+    Text = "Information on the session you're currently in",
+    TextColor3 = Color3.fromRGB(156, 163, 175),
+    Font = Enum.Font.Gotham,
+    TextSize = 11,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = ServerCard
+})
+
+local _, PlayersValueLabel = CreateSubTile(
+    ServerCard, "Players", tostring(#Players:GetPlayers()) .. " playing",
+    UDim2.new(0, 12, 0, 48), UDim2.new(0.38, -12, 0, 44)
+)
+local _, MaxPlayersValueLabel = CreateSubTile(
+    ServerCard, "Maximum Players", tostring(Players.MaxPlayers) .. " players can join this server",
+    UDim2.new(0.38, 6, 0, 48), UDim2.new(0.62, -18, 0, 44)
+)
+
+local _, LatencyValueLabel = CreateSubTile(
+    ServerCard, "Latency", "0ms",
+    UDim2.new(0, 12, 0, 100), UDim2.new(0.31, -12, 0, 44)
+)
+local _, RegionValueLabel = CreateSubTile(
+    ServerCard, "Server Region", "US",
+    UDim2.new(0.31, 6, 0, 100), UDim2.new(0.69, -18, 0, 44)
+)
+
+local _, SessionTimeLabel = CreateSubTile(
+    ServerCard, "In server for", "00:00:00",
+    UDim2.new(0, 12, 0, 152), UDim2.new(0.42, -12, 0, 44)
+)
+local JoinScriptTile, JoinScriptLabel = CreateSubTile(
+    ServerCard, "Join Script", "Tap to copy join script",
+    UDim2.new(0.42, 6, 0, 152), UDim2.new(0.58, -18, 0, 44)
+)
+
+local JoinScriptBtn = Create("TextButton", {
+    Size = UDim2.new(1, 0, 1, 0),
+    BackgroundTransparency = 1,
+    Text = "",
+    ZIndex = 5,
+    Parent = JoinScriptTile
+})
+JoinScriptBtn.MouseButton1Click:Connect(function()
+    local snippet = string.format(
+        'game:GetService("TeleportService"):TeleportToPlaceInstance(%d, "%s", game:GetService("Players").LocalPlayer)',
+        game.PlaceId,
+        tostring(game.JobId)
+    )
+    CopyToClipboard(snippet)
+    JoinScriptLabel.Text = "Copied join script!"
+    JoinScriptLabel.TextColor3 = Color3.fromRGB(52, 211, 153)
+    task.delay(1.5, function()
+        JoinScriptLabel.Text = "Tap to copy join script"
+        JoinScriptLabel.TextColor3 = Color3.fromRGB(160, 165, 178)
+    end)
+end)
+
+-- 2. DISCORD CARD (Blurple Corner Glow)
+local DiscordCard = Create("Frame", {
+    Name = "DiscordCard",
+    Size = UDim2.new(0.575, -6, 0, 68),
+    Position = UDim2.new(0, 0, 0, 304),
+    BorderSizePixel = 0,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) })
+})
+ApplyCardGlow(DiscordCard, Color3.fromRGB(99, 102, 241), "BottomLeft")
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 22),
+    Position = UDim2.new(0, 14, 0, 13),
+    BackgroundTransparency = 1,
+    Text = "Discord",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
+    TextSize = 17,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = DiscordCard
+})
+
+local DiscordSubText = Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 18),
+    Position = UDim2.new(0, 14, 0, 36),
+    BackgroundTransparency = 1,
+    Text = "Tap to join the Discord Server",
+    TextColor3 = Color3.fromRGB(185, 190, 208),
+    Font = Enum.Font.Gotham,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = DiscordCard
+})
+
+local DiscordClickBtn = Create("TextButton", {
+    Size = UDim2.new(1, 0, 1, 0),
+    BackgroundTransparency = 1,
+    Text = "",
+    ZIndex = 5,
+    Parent = DiscordCard
+})
+DiscordClickBtn.MouseButton1Click:Connect(function()
+    CopyToClipboard("https://discord.gg/noctis")
+    DiscordSubText.Text = "Copied discord.gg/noctis to clipboard!"
+    DiscordSubText.TextColor3 = Color3.fromRGB(165, 180, 252)
+    task.delay(1.5, function()
+        DiscordSubText.Text = "Tap to join the Discord Server"
+        DiscordSubText.TextColor3 = Color3.fromRGB(185, 190, 208)
+    end)
+end)
+
+-- 3. EXECUTOR DETECTION CARD (Crimson Top-Left Glow)
+local ExecName, ExecVer = DetectExecutor()
+local ExecutorCard = Create("Frame", {
+    Name = "ExecutorCard",
+    Size = UDim2.new(0.425, -6, 0, 82),
+    Position = UDim2.new(0.575, 6, 0, 84),
+    BorderSizePixel = 0,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) })
+})
+ApplyCardGlow(ExecutorCard, Color3.fromRGB(220, 38, 38), "TopLeft")
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 22),
+    Position = UDim2.new(0, 14, 0, 14),
+    BackgroundTransparency = 1,
+    Text = (ExecVer ~= "") and (ExecName .. " " .. ExecVer) or ExecName,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = ExecutorCard
+})
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -28, 0, 32),
+    Position = UDim2.new(0, 14, 0, 37),
+    BackgroundTransparency = 1,
+    Text = "Your executor seems to support this script.",
+    TextColor3 = Color3.fromRGB(209, 213, 219),
+    Font = Enum.Font.Gotham,
+    TextSize = 12,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    ZIndex = 3,
+    Parent = ExecutorCard
+})
+
+-- 4. FRIENDS CARD (Amber Gold Bottom-Left Glow)
+local FriendsCard = Create("Frame", {
+    Name = "FriendsCard",
+    Size = UDim2.new(0.425, -6, 0, 198),
+    Position = UDim2.new(0.575, 6, 0, 174),
+    BorderSizePixel = 0,
+    Parent = HomePadding
+}, {
+    Create("UICorner", { CornerRadius = UDim.new(0, 10) })
+})
+ApplyCardGlow(FriendsCard, Color3.fromRGB(217, 119, 6), "BottomLeft")
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 18),
+    Position = UDim2.new(0, 12, 0, 10),
+    BackgroundTransparency = 1,
+    Text = "Friends",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
+    TextSize = 15,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
+    Parent = FriendsCard
+})
+
+Create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 28),
+    Position = UDim2.new(0, 12, 0, 28),
+    BackgroundTransparency = 1,
+    Text = "Find out what your friends\nare currently doing",
+    TextColor3 = Color3.fromRGB(156, 163, 175),
+    Font = Enum.Font.Gotham,
+    TextSize = 11,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    ZIndex = 3,
+    Parent = FriendsCard
+})
+
+local _, InServerFriendsLabel = CreateSubTile(
+    FriendsCard, "In Server", "no friends",
+    UDim2.new(0, 12, 0, 66), UDim2.new(0.5, -15, 0, 54)
+)
+local _, OfflineFriendsLabel = CreateSubTile(
+    FriendsCard, "Offline", "0 friends",
+    UDim2.new(0.5, 3, 0, 66), UDim2.new(0.5, -15, 0, 54)
+)
+local _, OnlineFriendsLabel = CreateSubTile(
+    FriendsCard, "Online", "0 friends",
+    UDim2.new(0, 12, 0, 128), UDim2.new(0.5, -15, 0, 54)
+)
+local _, AllFriendsLabel = CreateSubTile(
+    FriendsCard, "All", "0 Friends",
+    UDim2.new(0.5, 3, 0, 128), UDim2.new(0.5, -15, 0, 54)
+)
+
+-- // 13. LIVE TELEMETRY & FRIENDS UPDATER
+local StartClock = os.clock()
+
+local function UpdateFriendsStats()
+    task.spawn(function()
+        local inServerCount = 0
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local isFriend = false
+                pcall(function()
+                    isFriend = LocalPlayer:IsFriendsWith(plr.UserId)
+                end)
+                if isFriend then
+                    inServerCount += 1
+                end
+            end
+        end
+        InServerFriendsLabel.Text = (inServerCount == 0) and "no friends" or (tostring(inServerCount) .. " friends")
+
+        local totalFriends = 0
+        local onlineFriends = 0
+
+        pcall(function()
+            local onlineList = LocalPlayer:GetFriendsOnline(200)
+            if type(onlineList) == "table" then
+                onlineFriends = #onlineList
+            end
+        end)
+
+        pcall(function()
+            local pages = Players:GetFriendsAsync(LocalPlayer.UserId)
+            while true do
+                local items = pages:GetCurrentPage()
+                for _ in ipairs(items) do
+                    totalFriends += 1
+                end
+                if pages.IsFinished then
+                    break
+                end
+                pages:AdvanceToNextPageAsync()
+            end
+        end)
+
+        local offlineFriends = math.max(0, totalFriends - onlineFriends)
+        OnlineFriendsLabel.Text = tostring(onlineFriends) .. " friends"
+        OfflineFriendsLabel.Text = tostring(offlineFriends) .. " friends"
+        AllFriendsLabel.Text = tostring(totalFriends) .. " Friends"
+    end)
+end
+
+UpdateFriendsStats()
+Players.PlayerAdded:Connect(function()
+    PlayersValueLabel.Text = tostring(#Players:GetPlayers()) .. " playing"
+    UpdateFriendsStats()
+end)
+Players.PlayerRemoving:Connect(function()
+    task.defer(function()
+        PlayersValueLabel.Text = tostring(#Players:GetPlayers()) .. " playing"
+        UpdateFriendsStats()
+    end)
+end)
+
+task.spawn(function()
+    while ScreenGui.Parent do
+        local elapsed = math.floor(os.clock() - StartClock)
+        local hrs = math.floor(elapsed / 3600)
+        local mins = math.floor((elapsed % 3600) / 60)
+        local secs = elapsed % 60
+        SessionTimeLabel.Text = string.format("%02d:%02d:%02d", hrs, mins, secs)
+
+        local pingMs = 0
+        pcall(function()
+            pingMs = math.floor(LocalPlayer:GetNetworkPing() * 1000)
+        end)
+        if pingMs <= 0 then
+            pcall(function()
+                pingMs = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            end)
+        end
+        LatencyValueLabel.Text = tostring(pingMs) .. "ms"
+
+        task.wait(1)
+    end
+end)
+
+-- // 14. MINIMIZE / RESTORE & CLOSE CONTROLS
+local Minimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+    Minimized = not Minimized
+    TweenService:Create(MainWindow, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = Minimized and UDim2.new(0, 690, 0, 42) or UDim2.new(0, 690, 0, 440)
+    }):Play()
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == Enum.KeyCode.RightShift then
+        MainWindow.Visible = not MainWindow.Visible
+    end
+end)
+
+return ScreenGui
